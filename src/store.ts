@@ -1,0 +1,8 @@
+import { create } from 'zustand';
+import type { Project, Section } from './types';
+import { templates } from './data';
+const saved=localStorage.getItem('website-builder-projects');
+const initial:Project[]=saved?JSON.parse(saved):[];
+type Store={projects:Project[];selectedId:string;select:(id:string)=>void;create:(templateId:string,name?:string)=>string;updateSections:(id:string,sections:Section[])=>void;rename:(id:string,name:string)=>void;publish:(id:string)=>void};
+const persist=(projects:Project[])=>localStorage.setItem('website-builder-projects',JSON.stringify(projects));
+export const useStore=create<Store>((set)=>({projects:initial,selectedId:initial[0]?.id??"",select:(selectedId)=>set({selectedId}),create:(templateId,name)=>{const t=templates.find(x=>x.id===templateId)??{id:templateId,name:'Untitled Project',sections:[]};const id=crypto.randomUUID();const p:Project={id,name:name??t.name,templateId,updatedAt:'Just now',updatedAtMs:Date.now(),lastAction:'Created project',published:false,sections:t.sections.map(x=>({...x,id:crypto.randomUUID()}))};set(s=>{const projects=[p,...s.projects];persist(projects);return{projects,selectedId:id}});return id},updateSections:(id,sections)=>set(s=>{const projects=s.projects.map(p=>p.id===id?{...p,sections,updatedAt:'Saved just now',updatedAtMs:Date.now(),lastAction:'Saved workspace changes'}:p);persist(projects);return{projects}}),rename:(id,name)=>set(s=>{const projects=s.projects.map(p=>p.id===id?{...p,name}:p);persist(projects);return{projects}}),publish:(id)=>set(s=>{const projects=s.projects.map(p=>p.id===id?{...p,published:true}:p);persist(projects);return{projects}})}));

@@ -1,0 +1,37 @@
+import {chromium,expect} from '@playwright/test';
+import {startStudio} from '../server.mjs';
+import {once} from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'studio-local-'));
+const app=startStudio({port:0,dataDir:temp});await once(app.server,'listening');
+const base='http://127.0.0.1:'+app.server.address().port;
+const browser=await chromium.launch({channel:'chrome',headless:true});
+const context=await browser.newContext(),page=await context.newPage();
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+try {
+ await page.goto(base+'/code/atlas');
+ const studio=page.frameLocator('iframe[title="Code Studio workspace"]');
+ await expect(studio.getByRole('heading',{name:'Build something worth sharing.'})).toBeVisible();
+ await expect(studio.getByLabel('Email',{exact:true})).toHaveCount(0);
+ await expect(studio.getByRole('button',{name:'Sign out',exact:true})).toHaveCount(0);
+ console.log('PASS Code Studio opens without login, signup, or sign-out controls');
+ await studio.getByRole('button',{name:'＋ Create project',exact:true}).click();
+ const dialog=studio.getByRole('dialog');await dialog.getByLabel('Name',{exact:true}).fill('Direct access test');
+ await dialog.getByRole('button',{name:'Create project',exact:true}).click();
+ const preview=studio.frameLocator('iframe[title="Component preview"]');
+ await preview.getByRole('button',{name:'Add to cart'}).click();
+ await expect(preview.getByRole('status')).toHaveText('1 item added to your cart.');
+ await studio.getByRole('button',{name:'Save draft',exact:true}).click();
+ await studio.getByRole('button',{name:'Publish component',exact:true}).click();
+ await expect(studio.getByRole('status').filter({hasText:'Published component'})).toBeVisible();
+ console.log('PASS create, interactive preview, save, and publish without credentials');
+ await context.clearCookies();await page.reload();
+ await studio.getByRole('button',{name:/Direct access test.*Continue editing/s}).click();
+ await expect(preview.getByRole('button',{name:'Add to cart'})).toBeVisible();
+ await studio.getByRole('button',{name:'Containers',exact:true}).click();
+ await expect(studio.getByRole('heading',{name:'Direct access test'})).toBeVisible();
+ expect(errors).toEqual([]);
+ console.log('PASS saved project and published component survive reload with no session cookie');
+}finally{await browser.close();await app.close();fs.rmSync(temp,{recursive:true,force:true});}

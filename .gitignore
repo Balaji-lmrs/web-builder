@@ -1,0 +1,13 @@
+node_modules/
+.npm-cache/
+.data/
+code-studio/node_modules/
+code-studio/.data/
+dist/
+code-studio/dist/
+code-studio/host-dist/
+*.tmp
+*.log
+.env
+.env.*
+!.env.example

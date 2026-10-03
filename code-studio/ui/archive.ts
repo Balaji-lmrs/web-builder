@@ -1,0 +1,1 @@
+export function mimeFor(path:string){const ext=path.split('.').pop()?.toLowerCase();return ({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',svg:'image/svg+xml',avif:'image/avif',woff:'font/woff',woff2:'font/woff2',mp4:'video/mp4',mp3:'audio/mpeg'} as Record<string,string>)[ext||'']||'application/octet-stream';}

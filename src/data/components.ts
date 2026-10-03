@@ -1,0 +1,2 @@
+export { components } from '../data';
+

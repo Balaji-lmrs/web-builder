@@ -1,0 +1,12 @@
+import {spawn} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+export function command(file,args,input,timeout=5000){return new Promise(resolve=>{let output='',done=false;const child=spawn(file,args,{windowsHide:true,stdio:['pipe','pipe','pipe']});const end=(code,error)=>{if(done)return;done=true;clearTimeout(timer);resolve({code,output:output.slice(-100000),error});};const timer=setTimeout(()=>{child.kill();end(124,'Command timed out.');},timeout);child.on('error',e=>end(127,e.message));child.on('close',code=>end(code));for(const stream of [child.stdout,child.stderr])stream.on('data',b=>{output=(output+b.toString()).slice(-100000)});child.stdin.on('error',()=>{});child.stdin.end(input||'');});}
+export async function runtimeStatus(){const r=await command('docker',['info','--format','{{.ServerVersion}}']);if(r.code!==0)return {available:false,message:'Terminal requires Docker with the Code Studio runtime image. Web previews work without it.'};const image=await command('docker',['image','inspect','lmrs-studio-runtime:local']);return {available:image.code===0,message:image.code===0?'Isolated Node.js terminal ready.':'Build the Code Studio runtime image to enable the terminal.'};}
+export async function runTerminal(project,script){
+ if(typeof script!=='string'||!script.trim()||script.length>2000)throw new Error('Enter a command (maximum 2000 characters).');
+ const status=await runtimeStatus();if(!status.available){const e=new Error(status.message);e.status=503;throw e;}
+ const boot=`const fs=require('fs'),cp=require('child_process');let s='';process.stdin.on('data',b=>s+=b);process.stdin.on('end',()=>{const p=JSON.parse(s);for(const f of p.files){const dest='/workspace/'+f.path;fs.mkdirSync(f.directory?dest:require('path').dirname(dest),{recursive:true});if(!f.directory)fs.writeFileSync(dest,f.content,f.binary?'base64':'utf8')}const child=cp.spawn('/bin/sh',['-lc',p.command],{cwd:'/workspace',stdio:'inherit'});child.on('exit',c=>process.exit(c||0));});`;
+ const name='lmrs-studio-'+randomUUID();
+ try{return await command('docker',['run','--name',name,'--rm','-i','--network','none','--memory','256m','--cpus','1','--pids-limit','64','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--user','1000:1000','--tmpfs','/workspace:rw,nosuid,size=32m,uid=1000,gid=1000','--tmpfs','/tmp:rw,noexec,nosuid,size=32m','-w','/workspace','lmrs-studio-runtime:local','node','-e',boot],JSON.stringify({files:project.files,command:script}),30000);}
+ finally{await command('docker',['rm','-f',name]);}
+}

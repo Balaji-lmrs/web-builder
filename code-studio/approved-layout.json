@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "width": 1440,
+  "height": 900,
+  "welcome": [
+    {
+      "id": "1c2ab618-b7ab-493e-8d89-f2dbe2308844",
+      "type": "Sidebar",
+      "x": 1,
+      "y": 0,
+      "w": 210,
+      "h": 900,
+      "text": "☰\n\nDashboard\n\nMy Projects\n\nWORKSPACE\n\nCode Studio"
+    },
+    {
+      "id": "d392ebac-41b0-4bbc-bc75-ce0768b3d3ae",
+      "type": "Header",
+      "x": 210,
+      "y": 0,
+      "w": 1230,
+      "h": 70,
+      "text": "Cart                       Profile"
+    },
+    {
+      "id": "a771c31b-4897-4207-9ea5-73591978e27a",
+      "type": "Title",
+      "x": 218,
+      "y": 7,
+      "w": 400,
+      "h": 65,
+      "text": "Code Studio"
+    },
+    {
+      "id": "0de072a5-f7b4-4c47-aa45-ff0d79b942c4",
+      "type": "Tabs",
+      "x": 210,
+      "y": 82,
+      "w": 1230,
+      "h": 50,
+      "text": "Files & editor     Containers     Templates     Assets     User modifications"
+    },
+    {
+      "id": "3feb208d-768e-49cf-a81e-26f320ad0fac",
+      "type": "Heading",
+      "x": 209,
+      "y": 152,
+      "w": 800,
+      "h": 70,
+      "text": "Build something worth sharing."
+    },
+    {
+      "id": "fc8ee252-eb6f-41b6-b34f-8f186075bc14",
+      "type": "Description",
+      "x": 205,
+      "y": 220,
+      "w": 950,
+      "h": 55,
+      "text": "Create a component with code. Preview it, refine it, and publish it to your library."
+    },
+    {
+      "id": "82d25639-965e-4ca5-95f2-7f873c60d918",
+      "type": "Button",
+      "x": 237,
+      "y": 314,
+      "w": 160,
+      "h": 45,
+      "text": "Create project"
+    },
+    {
+      "id": "63d6aa6a-0eb0-43b6-8642-f0438f55c21d",
+      "type": "Card",
+      "x": 235,
+      "y": 415,
+      "w": 300,
+      "h": 220,
+      "text": "</>\n\nMy component\n\nComponent · 3 files\n\nContinue editing →"
+    },
+    {
+      "id": "b45e8f24-77a0-415d-9de1-5fc10ec43dc3",
+      "type": "Card",
+      "x": 569,
+      "y": 418,
+      "w": 300,
+      "h": 220,
+      "text": "</>\n\nForm\n\nComponent · 4 files\n\nContinue editing →"
+    }
+  ],
+  "editor": [
+    {
+      "id": "0ce3c169-a7be-4efe-ac21-409b63d01982",
+      "type": "Menu",
+      "x": 0,
+      "y": 0,
+      "w": 1100,
+      "h": 40,
+      "text": "File     Edit     View     Run     Terminal     Help"
+    },
+    {
+      "id": "28f0f056-9572-4f69-a045-1197fde678da",
+      "type": "Button",
+      "x": 1070,
+      "y": 0,
+      "w": 100,
+      "h": 40,
+      "text": "Save"
+    },
+    {
+      "id": "370acfe8-5b77-45ff-a605-b3c13e82fb60",
+      "type": "Button",
+      "x": 1185,
+      "y": 0,
+      "w": 110,
+      "h": 40,
+      "text": "Run preview"
+    },
+    {
+      "id": "727ad9d3-3ff7-4a25-a338-e8582df488ca",
+      "type": "Button",
+      "x": 1308,
+      "y": 0,
+      "w": 130,
+      "h": 40,
+      "text": "Publish"
+    },
+    {
+      "id": "51c4d289-c556-40f0-9197-8879d607bd1e",
+      "type": "Explorer",
+      "x": 0,
+      "y": 40,
+      "w": 230,
+      "h": 830,
+      "text": "EXPLORER\n\nMy project\n   index.html\n   styles.css\n   script.js\n   assets"
+    },
+    {
+      "id": "d0ce1616-45bb-4114-ad1b-a26cc7391739",
+      "type": "Editor",
+      "x": 230,
+      "y": 40,
+      "w": 650,
+      "h": 640,
+      "text": "index.html     styles.css     script.js\n\n1  <form>\n2    <input name=\"email\">\n3    <button>Submit</button>\n4  </form>"
+    },
+    {
+      "id": "4acb512d-af95-48f5-a078-2007f1af7b2d",
+      "type": "Preview",
+      "x": 880,
+      "y": 39,
+      "w": 560,
+      "h": 830,
+      "text": "LIVE PREVIEW\n\nYour website preview\n\nName __________________\n\nEmail __________________\n\nSubmit"
+    },
+    {
+      "id": "4e2bc37f-4bd7-43bb-be62-778d25157514",
+      "type": "Terminal",
+      "x": 230,
+      "y": 680,
+      "w": 650,
+      "h": 190,
+      "text": "TERMINAL     PROBLEMS     OUTPUT\n\n> Ready"
+    },
+    {
+      "id": "849ddccb-a3cb-4ea9-a931-167f84fa4622",
+      "type": "Status",
+      "x": 0,
+      "y": 870,
+      "w": 1440,
+      "h": 30,
+      "text": "Saved                       HTML · UTF-8"
+    }
+  ]
+}

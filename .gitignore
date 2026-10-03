@@ -11,3 +11,5 @@ code-studio/host-dist/
 .env
 .env.*
 !.env.example
+
+code-studio/.git-backup/

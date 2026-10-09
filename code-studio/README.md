@@ -7,7 +7,7 @@ A local, working code workspace integrated into the existing Code Studio route.
 Open PowerShell and run:
 
 ```powershell
-cd C:\Users\balaj\Desktop\2026-09-15\th\website\code-studio
+cd 'C:\Users\balaj\Desktop\web ide\th\website\code-studio'
 powershell -ExecutionPolicy Bypass -File .\start.ps1
 ```
 
@@ -44,7 +44,7 @@ The original website source and original distribution were backed up before inte
 
 `C:\Users\balaj\Documents\Codex\backups\website-desktop-before-code-studio-20261003`
 
-Existing file change: `src/app/App.tsx` only imports the new wrapper, connects the existing Code Studio button, and renders the wrapper in the existing code route. New files are under `code-studio/` and `src/codeStudio/`. Root dependencies, shared styles, dashboard, projects, cart, and the visual builder were not rewritten.
+The top-level `code-studio/` folder contains the editor, local API, and persistence. The main website embeds it through `src/codeStudio/`. The rest of the website source is mapped in `src/ARCHITECTURE.md`.
 
 ## Current boundaries
 
@@ -55,7 +55,7 @@ Existing file change: `src/app/App.tsx` only imports the new wrapper, connects t
 - Preview uses an opaque-origin sandbox and restrictive content policy. Code is still running in the browser; this is not a production-grade hostile-code execution system.
 - Device controls constrain the preview within available screen space; they are not emulators of specific devices.
 - File/folder opening imports copies into this workspace. It does not continuously edit the original disk folder. Export ZIP to obtain files.
-- Published items currently appear in **Code Studio's Containers library**. The existing visual Workspace/Container pages have not been connected to the new database, in keeping with the instruction to leave them unchanged.
+- Published items are shared with the main website through its published-library integration.
 - The service binds to loopback only. Netlify's static drop alone cannot host its API or database. Production hosting, account recovery, central website authentication, backups, abuse limits, and deployment security remain separate work.
 - Project limits are 400 files and 10 MB of stored content. Automatic category detection is a simple non-AI rule; ambiguous components can use a manual category.
 

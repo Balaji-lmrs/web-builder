@@ -1,1 +1,0 @@
-import type { ReactNode } from "react"; export function Modal({open,title,children,onClose}:{open:boolean;title:string;children:ReactNode;onClose:()=>void}){if(!open)return null;return <div className="modalBackdrop" onClick={onClose}><section className="componentModal" onClick={e=>e.stopPropagation()}><h2>{title}</h2>{children}</section></div> }

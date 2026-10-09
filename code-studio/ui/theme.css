@@ -1,0 +1,23 @@
+:root[data-theme="light"] { color-scheme: light; background:#f5f7fb; color:#18243a; }
+:root[data-theme="light"] :is(body,#root,.cs-root,.cs-top,.cs-nav,.cs-tools,.cs-explorer,.cs-tabs,.cs-editor-tools,.cs-console,.cs-preview,.cs-preview-status,.cs-inspector,.cs-modal,.cs-auth,.cs-cards>button,.cs-cards article) {
+  background:#fff; color:#18243a; border-color:#d5ddea;
+}
+:root[data-theme="light"] :is(.cs-root,.cs-welcome,.cs-library,.cs-explorer,.cs-tabs,.cs-preview) { background:#f5f7fb; }
+:root[data-theme="light"] :is(button,input,textarea,select) { background:#fff; color:#26344e; border-color:#c7d2e4; }
+:root[data-theme="light"] :is(button:hover,.cs-cards>button:hover) { background:#eef1ff; color:#35258c; border-color:#a89bdf; }
+:root[data-theme="light"] :is(p,small,.cs-pane-heading,.cs-explorer-footer,.cs-console pre,.cs-preview-heading strong,.cs-preview-status,.cs-modal label,.cs-inspector label,.cs-editor-tools span) { color:#52627a; }
+:root[data-theme="light"] :is(.cs-brand strong,h1,h2,h3,.cs-cards strong) { color:#18243a; }
+:root[data-theme="light"] :is(.cs-nav button,.cs-tabs button,.cs-console nav button,.cs-tree button) { color:#52627a; }
+:root[data-theme="light"] :is(.cs-nav button.active,.cs-tabs button.active,.cs-console nav button.active,.cs-tree button.active,.cs-preview-heading button.active,.cs-preview-tools button.active,.cs-file-menu[open]>summary,.cs-library-menu[open]>summary) {
+  background:#ebe7ff; color:#4930ad; border-color:#b8a5f0;
+}
+:root[data-theme="light"] :is(.cs-card-icon,.cs-logo,.cs-role,.cs-pane-heading span) { background:#ece6ff; color:#593cbb; border-color:#d2c5f2; }
+:root[data-theme="light"] .cs-cards>button>span:last-child { color:#593cbb; }
+:root[data-theme="light"] .cs-nav>span { color:#157347; }
+:root[data-theme="light"] .cs-status { background:#eee8ff; color:#4930ad; border-color:#d5c9f5; }
+:root[data-theme="light"] .cs-workbench-resizer { background:#d5ddea; }
+:root[data-theme="light"] .cs-workbench-resizer:hover { background:#8264ff; }
+:root[data-theme="light"] .cs-banner { background:#e7f6ef; color:#176442; border-color:#b5deca; }
+:root[data-theme="light"] :is(.cs-banner.error,.cs-danger) { background:#fff0f1; color:#9f263a; border-color:#eab8bf; }
+:root[data-theme="light"] .cs-error { color:#a52239!important; }
+:root[data-theme="light"] .cs-primary { color:#fff!important; }

@@ -18,6 +18,23 @@ test('first account is admin; subsequent account is user',async()=>{const a=awai
 test('incorrect password rejected',async()=>assert.equal((await call('session','POST',{email:'admin@test.local',password:'WrongPassword123'})).status,401));
 test('cross-origin mutation rejected',async()=>assert.equal((await call('projects','POST',starter,adminCookie,{Origin:'https://bad.example'})).status,403));
 test('create real HTML CSS JS project',async()=>{const r=await call('projects','POST',starter);assert.equal(r.status,201);project=r.body;assert.equal(project.files.length,4);});
+test('creation requires details and rejects duplicate names',async()=>{
+ assert.equal((await call('projects','POST',{...starter,name:'',files:[]})).status,400);
+ assert.equal((await call('projects','POST',{...starter,description:'',files:[]})).status,400);
+ assert.equal((await call('projects','POST',{...starter,category:'',files:[]})).status,400);
+ const duplicate=await call('projects','POST',{...starter,name:'  BUTTON COMPONENT  ',files:[],entry:''});
+ assert.equal(duplicate.status,409);
+ assert.match(duplicate.body.error,/already exists/);
+});
+test('matching code requires explicit confirmation to save',async()=>{
+ const draft=(await call('projects','POST',{...starter,name:'Another button',files:[],entry:''})).body;
+ const update={...draft,files:starter.files,entry:starter.entry};
+ const blocked=await call('projects/'+draft.id,'PUT',update);
+ assert.equal(blocked.status,409);
+ assert.match(blocked.body.error,/Duplicate component/);
+ const allowed=await call('projects/'+draft.id,'PUT',{...update,allowDuplicate:true});
+ assert.equal(allowed.status,200);
+});
 test('other user cannot read or save admin draft',async()=>{assert.equal((await call('projects/'+project.id,'GET',undefined,userCookie)).status,404);assert.equal((await call('projects/'+project.id,'PUT',project,userCookie)).status,404);});
 test('save persists files and increments revision',async()=>{project.files.push({path:'nested/readme.md',content:'New file'});const r=await call('projects/'+project.id,'PUT',project);assert.equal(r.status,200);project=r.body;assert.equal(project.revision,2);const load=await call('projects/'+project.id);assert.equal(load.body.files.at(-1).content,'New file');});
 test('stale saves are rejected rather than overwrite data',async()=>assert.equal((await call('projects/'+project.id,'PUT',{...project,revision:1})).status,409));
@@ -52,3 +69,26 @@ test('unpublished content can be published again',async()=>{const r=await call('
 test('automatic form category and duplicate publish detection',async()=>{let p=(await call('projects','POST',{...starter,name:'Form recognition',category:'Auto',files:[{path:'index.html',content:'<form><label>Name<input name="name"></label><button>Send</button></form>'}]})).body;assert.equal((await call('projects/'+p.id+'/publish','POST',{revision:p.revision})).status,201);assert.equal((await call('library')).body.find(r=>r.name==='Form recognition').category,'Forms');assert.equal((await call('projects/'+p.id+'/publish','POST',{revision:p.revision})).body.unchanged,true);});
 test('nested CSS imports and images resolve from their own folder',async()=>{const r=await compile({...starter,entry:'pages/home.html',files:[{path:'pages/home.html',content:'<link rel="stylesheet" href="/css/main.css"><p>Hello</p>'},{path:'css/main.css',content:'@import "./theme.css";p{background-image:url(../assets/logo.svg)}'},{path:'css/theme.css',content:'p{color:purple}'},{path:'assets/logo.svg',content:'<svg xmlns="http://www.w3.org/2000/svg"/>',binary:false,mime:'image/svg+xml'}]},'paths');assert.match(r.html,/color: purple/);assert.match(r.html,/data:image\/svg\+xml/);});
 test('SQLite projects accounts and releases survive service restart',async()=>{await app.close();app=startStudio({port:0,dataDir:temp,localAccess:false});await once(app.server,'listening');base='http://127.0.0.1:'+app.server.address().port;assert.equal((await call('me')).body.role,'admin');assert.equal((await call('projects/'+project.id)).body.id,project.id);assert.equal((await call('library')).body.length,2);});
+test('deleting a published project from My Projects removes its draft and release',async()=>{
+ const created=await call('projects','POST',{...starter,name:'Card deletion verification',files:[{path:'index.html',content:'<button>Remove me</button>'}]});
+ assert.equal(created.status,201);
+ const published=await call('projects/'+created.body.id+'/publish','POST',{revision:created.body.revision});
+ assert.equal(published.status,201);
+ assert.equal((await call('library/'+published.body.id+'/delete','POST',{deleteProject:true})).status,200);
+ assert.equal((await call('projects/'+created.body.id)).status,404);
+ assert.ok(!(await call('studio-library')).body.some(item=>item.name==='Card deletion verification'));
+});
+test('matching code requires confirmation when publishing under a new name',async()=>{
+ const files=[{path:'index.html',content:'<button>Publish duplicate check</button>'}];
+ const original=await call('projects','POST',{...starter,name:'Publish duplicate original',files});
+ assert.equal(original.status,201);
+ const duplicate=await call('projects','POST',{...starter,name:'Publish duplicate copy',files:[],entry:''});
+ assert.equal(duplicate.status,201);
+ const saved=await call('projects/'+duplicate.body.id,'PUT',{...duplicate.body,files,entry:'index.html',allowDuplicate:true});
+ assert.equal(saved.status,200);
+ const blocked=await call('projects/'+duplicate.body.id+'/publish','POST',{revision:saved.body.revision});
+ assert.equal(blocked.status,409);
+ assert.match(blocked.body.error,/Duplicate component/);
+ const confirmed=await call('projects/'+duplicate.body.id+'/publish','POST',{revision:saved.body.revision,allowDuplicate:true});
+ assert.equal(confirmed.status,201);
+});

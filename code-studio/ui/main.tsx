@@ -3,6 +3,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { zipSync, unzipSync, strToU8, strFromU8 } from "fflate";
 import Editor, { language, type EditorHandle } from "./editor";
+import AssetPicker from "./AssetPicker";
+import AssetLibraryView from "./AssetLibraryView";
 import {
   api,
   type Project,
@@ -11,6 +13,7 @@ import {
   type Release,
 } from "./types";
 import "./style.css";
+import "./theme";
 import { isTextFile, previewEntry } from "./folders";
 type Selection = {
   node: number;
@@ -69,7 +72,9 @@ function App() {
     [selectedFile, setSelectedFile] = useState(""),
     [collapsed, setCollapsed] = useState<string[]>([]);
   const [view, setView] = useState("editor"),
+    [libraryKind, setLibraryKind] = useState<'component'|'container'|'template'>('component'),
     [library, setLibrary] = useState<Release[]>([]),
+    [libraryStatus, setLibraryStatus] = useState("all"),
     [query, setQuery] = useState(""),
     [history, setHistory] = useState<{ id: string; created: number }[]>([]),
     [modifications, setModifications] = useState<
@@ -82,6 +87,7 @@ function App() {
     [category, setCategory] = useState("Auto");
   const [notice, setNotice] = useState(""),
     [error, setError] = useState(""),
+    [publishDuplicate, setPublishDuplicate] = useState(""),
     [saved, setSaved] = useState("Saved"),
     [runtime, setRuntime] = useState({
       available: false,
@@ -99,6 +105,20 @@ function App() {
     [inspect, setInspect] = useState(false),
     [selection, setSelection] = useState<Selection | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [deleteLibraryItem, setDeleteLibraryItem] = useState<Release | null>(null);
+  const [projectMenu, setProjectMenu] = useState<string | null>(null);
+  useEffect(() => {
+    const closeMenus = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      document.querySelectorAll<HTMLDetailsElement>(".cs-file-menu[open], .cs-library-menu[open]").forEach((menu) => {
+        if (menu.classList.contains("cs-library-menu") && !(project && view === "editor")) return;
+        if (!target || !menu.contains(target) || target.closest("button")) menu.removeAttribute("open");
+      });
+    };
+    document.addEventListener("click", closeMenus);
+    return () => document.removeEventListener("click", closeMenus);
+  }, [project, view]);
+
   const [editorWidth, setEditorWidth] = useState(() =>
     Number(localStorage.getItem("code-studio-editor-width")) || 650,
   );
@@ -151,17 +171,27 @@ function App() {
     setOutput([]);
     setBuildErrors([]);
   }
-  async function save(): Promise<Project> {
+  useEffect(() => {
+    const requested = new URLSearchParams(location.search).get("project");
+    if (requested && projects.length && !project) {
+      const match = projects.find((item) => item.id === requested);
+      if (match) open(match);
+    }
+  }, [projects, project]);
+  async function save(askForDuplicate = false, allowDuplicate = false): Promise<Project> {
     if (editTask.current) await editTask.current;
     if (saveTask.current) {
-      await saveTask.current;
-      return save();
+      try { await saveTask.current; } catch { /* A manual save can retry after autosave finds a duplicate. */ }
+      return save(askForDuplicate, allowDuplicate);
     }
     const p = current.current;
     if (!p) throw new Error("Open a project first.");
     if (fingerprint(p) === savedHash.current) return p;
     setSaved("Saving…");
-    const task = api<Project>("projects/" + p.id, "PUT", p);
+    const task = api<Project>("projects/" + p.id, "PUT", { ...p, allowDuplicate }).catch(async (error) => {
+      if (!askForDuplicate || !String(error.message).startsWith("Duplicate ") || !window.confirm(`${error.message}\n\nContinue to save this duplicate?`)) throw error;
+      return api<Project>("projects/" + p.id, "PUT", { ...p, allowDuplicate: true });
+    });
     saveTask.current = task;
     try {
       const result = await task;
@@ -349,7 +379,7 @@ function App() {
           : action === "new-folder"
             ? "components"
             : action === "new-project"
-              ? "Untitled project"
+              ? ""
               : "",
     );
     if (action === "metadata" && project) {
@@ -361,7 +391,7 @@ function App() {
       setDescription("");
       if (action === "new-project") {
         setKind(user?.role === "admin" ? "component" : "container");
-        setCategory("Auto");
+        setCategory("");
       }
     }
     setModal(action);
@@ -547,14 +577,35 @@ function App() {
       "application/zip",
     );
   }
-  async function libraryView() {
+  async function libraryView(kind: 'component'|'container'|'template' = 'component') {
+    setLibraryKind(kind);
+    setLibraryStatus("all");
     setQuery("");
     await saveIfOpen();
-    setLibrary(await api("library"));
+    setLibrary(await api("studio-library"));
     setView("library");
   }
   async function saveIfOpen() {
     if (current.current) await save();
+  }
+  async function publishProject(allowDuplicate = false) {
+    try {
+      const p = await save(false, allowDuplicate);
+      const r = await api("projects/" + p.id + "/publish", "POST", {
+        revision: p.revision,
+        allowDuplicate,
+      });
+      setPublishDuplicate("");
+      setError("");
+      setNotice(`Published ${p.kind} · version ${r.version}. Available in Containers.`);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Unable to publish project.";
+      if (!allowDuplicate && message.startsWith("Duplicate ")) {
+        setPublishDuplicate(message);
+        return;
+      }
+      throw reason;
+    }
   }
   async function inspectChange(changes: unknown) {
     if (!selection || !compiledProject.current || !project) return;
@@ -686,6 +737,7 @@ function App() {
         </div>
         <span className="cs-role">{user.role}</span>
         <div className="cs-top-actions">
+          <AssetPicker showTrigger={!!project && view === "editor"} />
           <button onClick={() => request("new-project")}>＋ New project</button>
           <button
             onClick={() =>
@@ -703,7 +755,7 @@ function App() {
               <button
                 onClick={() =>
                   safe(async () => {
-                    await save();
+                    await save(true);
                     setNotice("Draft saved");
                   })
                 }
@@ -714,19 +766,7 @@ function App() {
               {user.role === "admin" && (
                 <button
                   className="cs-primary"
-                  onClick={() =>
-                    safe(async () => {
-                      const p = await save();
-                      const r = await api(
-                        "projects/" + p.id + "/publish",
-                        "POST",
-                        { revision: p.revision },
-                      );
-                      setNotice(
-                        `Published ${p.kind} · version ${r.version}. Available in Containers.`,
-                      );
-                    })
-                  }
+                  onClick={() => safe(() => publishProject())}
                 >
                   Publish {project.kind}
                 </button>
@@ -758,26 +798,30 @@ function App() {
           Files & editor
         </button>
         <button
-          className={view === "library" ? "active" : ""}
-          onClick={() => safe(libraryView)}
+          className={view === "library" && libraryKind === "component" ? "active" : ""}
+          onClick={() => safe(() => libraryView("component"))}
+        >
+          Components
+        </button>
+        <button
+          className={view === "library" && libraryKind === "container" ? "active" : ""}
+          onClick={() => safe(() => libraryView("container"))}
         >
           Containers
         </button>
         <button
+          className={view === "library" && libraryKind === "template" ? "active" : ""}
           onClick={() =>
             safe(async () => {
-              await libraryView();
-              setQuery("template");
+              await libraryView('template');
             })
           }
         >
           Templates
         </button>
         <button
-          onClick={() => {
-            setView("editor");
-            fileInput.current?.click();
-          }}
+          className={view === "assets" ? "active" : ""}
+          onClick={() => safe(async () => { await saveIfOpen(); setView("assets"); })}
         >
           Assets
         </button>
@@ -839,25 +883,31 @@ function App() {
       />
       {view === "projects" || (!project && view === "editor") ? (
         <section className="cs-welcome">
-          <span className="cs-eyebrow">YOUR WORKSPACE</span>
-          <h1>Build something worth sharing.</h1>
-          <p>
-            Create a component with code. Preview it, refine it, and publish it
-            to your library.
-          </p>
-          <button className="cs-primary" onClick={() => request("new-project")}>
-            ＋ Create project
-          </button>
+          <div className="cs-welcome-header">
+            <div>
+              <span className="cs-eyebrow">YOUR WORKSPACE</span>
+              <h1>Build something worth sharing.</h1>
+              <p>
+                Create a component with code. Preview it, refine it, and publish it
+                to your library.
+              </p>
+            </div>
+            <button className="cs-primary" onClick={() => request("new-project")}>
+              ＋ Create project
+            </button>
+          </div>
           <div className="cs-cards">
             {projects.map((p) => (
-              <button
+              <div
+                className="cs-project-card"
                 key={p.id}
-                onClick={() =>
-                  safe(async () => {
+                onClick={(event) => {
+                  if ((event.target as Element).closest(".cs-card-delete")) return;
+                  void safe(async () => {
                     await saveIfOpen();
                     open(await api("projects/" + p.id));
-                  })
-                }
+                  });
+                }}
               >
                 <span className="cs-card-icon">&lt;/&gt;</span>
                 <strong>{p.name}</strong>
@@ -865,14 +915,16 @@ function App() {
                   {p.kind} · {p.files.length} files
                 </small>
                 <span>Continue editing →</span>
-              </button>
+                <span className="cs-card-delete" role="button" tabIndex={0} aria-label="Project options" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setProjectMenu(projectMenu === p.id ? null : p.id); }}>⋮</span>{projectMenu === p.id && <div className="cs-project-menu" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}><button onClick={() => safe(async () => { await api("projects/" + p.id, "DELETE", {}); await refresh(); setProject(null); setProjectMenu(null); })}>Delete</button></div>}
+              </div>
             ))}
           </div>
         </section>
       ) : null}
+      {view === "assets" && <AssetLibraryView />}
       {view === "library" && (
         <section className="cs-library">
-          <h1>Published components</h1>
+          <h1>{libraryKind === 'template' ? 'Templates' : libraryKind === 'container' ? 'Containers' : 'Components'}</h1>
           <p>
             Use a published item to create your own editable copy. Changes to
             your copy are visible to its publishing administrator.
@@ -883,8 +935,13 @@ function App() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <div className="cs-status-chips" aria-label="Library status">
+            {['all','published','unpublished'].map(status=><button key={status} aria-pressed={libraryStatus===status} className={libraryStatus===status?'active':''} onClick={()=>setLibraryStatus(status)}>{status[0].toUpperCase()+status.slice(1)}</button>)}
+          </div>
           <div className="cs-cards">
             {library
+              .filter(r=>libraryStatus==='all'||r.status===libraryStatus||(libraryStatus==='unpublished'&&r.status==='draft'))
+              .filter((r) => r.kind === libraryKind)
               .filter((r) =>
                 `${r.name} ${r.kind} ${r.category}`
                   .toLowerCase()
@@ -896,51 +953,28 @@ function App() {
                     {r.kind === "template" ? "▧" : "◇"}
                   </span>
                   <small>
-                    {r.category} · v{r.version}
+                    {r.category} · {({draft:'Draft',published:'Published',unpublished:'Unpublished'} as Record<string,string>)[r.status || 'published']}{r.version > 0 ? ` · v${r.version}` : ''}
                   </small>
                   <h2>{r.name}</h2>
                   <p>{r.description}</p>
-                  <button
-                    className="cs-primary"
-                    onClick={() =>
-                      safe(async () => {
-                        await saveIfOpen();
-                        open(
-                          await api("library/" + r.id + "/fork", "POST", {}),
-                        );
-                        await refresh();
-                      })
-                    }
-                  >
-                    Use in my project
-                  </button>
-                  {user.role === "admin" && (
-                    <button
-                      onClick={() =>
-                        safe(async () => {
-                          await api(
-                            "library/" + r.id + "/unpublish",
-                            "POST",
-                            {},
-                          );
-                          setLibrary(await api("library"));
-                        })
-                      }
-                    >
-                      Unpublish
-                    </button>
-                  )}
+                  {user.role === "admin" && <div className="cs-card-actions">
+                    <button type="button" onClick={()=>safe(async()=>{await saveIfOpen();open(r.status==='draft'?await api('projects/'+r.id):await api('library/'+r.id+'/modify','POST',{}));await refresh();})}>Edit</button>
+                    <button type="button" className="cs-danger" onClick={()=>setDeleteLibraryItem(r)}>Delete</button>
+                    {r.status==='published'
+                      ? <button type="button" onClick={()=>safe(async()=>{await api('library/'+r.id+'/unpublish','POST',{});setLibrary(await api('studio-library'));})}>Unpublish</button>
+                      : <button type="button" onClick={()=>safe(async()=>{if(r.status==='draft'){const item=await api<Project>('projects/'+r.id);await api('projects/'+r.id+'/publish','POST',{revision:item.revision});}else await api('library/'+r.id+'/publish','POST',{});setLibrary(await api('studio-library'));})}>Publish</button>}
+                  </div>}
                 </article>
               ))}
           </div>
-          {!library.length && (
+          {!library.some(r => (libraryStatus==='all'||r.status===libraryStatus||(libraryStatus==='unpublished'&&r.status==='draft')) && r.kind === libraryKind && `${r.name} ${r.kind} ${r.category}`.toLowerCase().includes(query.toLowerCase())) && (
             <p>
-              No items published yet. An administrator can publish a tested
-              project here.
+              No items in this view.
             </p>
           )}
         </section>
       )}
+      {deleteLibraryItem && <div className="cs-asset-modal-backdrop" onClick={()=>setDeleteLibraryItem(null)}><div className="cs-asset-modal" role="dialog" aria-modal="true" aria-label="Delete library item" onClick={event=>event.stopPropagation()}><h2>Delete {deleteLibraryItem.kind}?</h2><p>Delete “{deleteLibraryItem.name}”? This cannot be undone.</p><div><button type="button" onClick={()=>setDeleteLibraryItem(null)}>Cancel</button><button type="button" className="cs-danger" onClick={()=>safe(async()=>{const item=deleteLibraryItem;if(item.status==='draft')await api('projects/'+item.id,'DELETE',{});else await api('library/'+item.id+'/delete','POST',{deleteProject:true});setDeleteLibraryItem(null);await refresh();setLibrary(await api('studio-library'));})}>Delete</button></div></div></div>}
       {view === "modifications" && (
         <section className="cs-library">
           <h1>User modifications</h1>
@@ -1443,6 +1477,19 @@ function App() {
           </footer>
         </>
       )}
+      {publishDuplicate && (
+        <div className="cs-modal-backdrop">
+          <div className="cs-modal" role="dialog" aria-modal="true" aria-label="Duplicate project code">
+            <h2>This code already exists</h2>
+            <p>{publishDuplicate}</p>
+            <p>Do you want to continue and publish this project?</p>
+            <div className="cs-modal-actions">
+              <button type="button" onClick={() => setPublishDuplicate("")}>Cancel</button>
+              <button type="button" className="cs-primary" onClick={() => safe(() => publishProject(true))}>Continue and publish</button>
+            </div>
+          </div>
+        </div>
+      )}
       {modal && (
         <div className="cs-modal-backdrop">
           <form
@@ -1513,6 +1560,7 @@ function App() {
                 <label>
                   Description
                   <textarea
+                    required={modal === "new-project"}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                   />
@@ -1533,9 +1581,11 @@ function App() {
                 <label>
                   Category
                   <select
+                    required={modal === "new-project"}
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
                   >
+                    {modal === "new-project" && <option value="">Select category</option>}
                     {[
                       "Auto",
                       "Buttons",

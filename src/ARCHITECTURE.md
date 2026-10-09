@@ -1,16 +1,19 @@
-# Source organization
+# Source map
 
-The source tree is organized by responsibility:
+`main.tsx` starts the React app. `app/App.tsx` contains only the route table.
 
-- `pages/` contains feature page areas: Dashboard, Projects, Templates, Components, Workspace, and Settings.
-- `components/layout/` contains the application shell, sidebar, top bar, and profile menu.
-- `components/common/` contains reusable UI controls.
-- `components/editor/` contains workspace editing controls.
-- `data/` contains template and component catalogs.
-- `store/` contains application state modules.
-- `types/` contains domain types.
-- `hooks/` contains reusable React hooks.
-- `utils/` contains storage, date, and validation helpers.
-- `styles/` contains feature stylesheet modules.
+- `app/Shell.tsx`: shared website navigation, account controls, and page shell.
+- `app/Auth.tsx`: login and signup screens.
+- `pages/Dashboard/`: dashboard UI.
+- `pages/Projects/`: My Projects, project cards, filters, and published-item thumbnails.
+- `pages/Templates/`, `pages/Components/`, `pages/Settings/`: their respective pages.
+- `pages/Workspace/`: visual website builder and canvas behavior.
+- `pages/Preview/`, `pages/Cart/`: preview and cart pages.
+- `app/AssetsLibrary.tsx`, `app/ProjectCartDrawer.tsx`: My Projects asset library and cart sidebar.
+- `codeStudio/CodeStudioRoute.tsx`: route that embeds the separate Code Studio application.
+- `codeStudio/CodeStudio.tsx`: iframe host for that application.
+- `assetLibrary.ts`, `publishedLibrary.tsx`, `store.ts`, `types.ts`, `data.ts`: shared storage, published content, project state, domain types, and built-in data.
 
-Compatibility modules currently re-export the existing runtime modules. This keeps the website behavior unchanged while giving future work a clear destination for incremental extraction.
+The separate top-level `code-studio/` directory is **not a duplicate page**. It is the Code Studio editor, local API, SQLite storage integration, and its own test/build configuration. Its generated `host-dist/` is the built main website served by that local server. Do not delete `code-studio/.data/`; it contains saved local work.
+
+`src/styles.css` remains the shared stylesheet. Its existing cascade order is part of the current UI, so it was not split during the behavior-preserving source reorganization.

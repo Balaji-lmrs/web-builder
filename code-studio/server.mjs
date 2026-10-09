@@ -17,6 +17,7 @@ export function startStudio({port=4317,dataDir=path.join(root,'.data'),hostRoot=
  CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,owner TEXT,body TEXT,revision INTEGER,updated INTEGER,fork TEXT);
  CREATE TABLE IF NOT EXISTS history(id TEXT PRIMARY KEY,project TEXT,body TEXT,created INTEGER);
  CREATE TABLE IF NOT EXISTS releases(id TEXT PRIMARY KEY,project TEXT,owner TEXT,version INTEGER,body TEXT,hash TEXT,created INTEGER,active INTEGER);
+ CREATE TABLE IF NOT EXISTS assets(id TEXT PRIMARY KEY,owner TEXT,name TEXT,mime TEXT,content BLOB,created INTEGER);
  `);
  let localUser=null;
  if(localAccess){
@@ -27,8 +28,19 @@ export function startStudio({port=4317,dataDir=path.join(root,'.data'),hostRoot=
  const sessions=new Map(); // Login attempt counters expire, never store passwords.
  function own(id,user){const row=db.prepare('SELECT * FROM projects WHERE id=? AND owner=?').get(id,user.id);if(!row)throw fail(404,'Project not found.');return row;}
  function projectRow(row){return {...JSON.parse(row.body),id:row.id,revision:row.revision,updated:row.updated,fork:row.fork};}
- function create(body,user,fork=null){const project=validateProject(body),id=randomUUID();db.prepare('INSERT INTO projects VALUES(?,?,?,?,?,?)').run(id,user.id,JSON.stringify(project),1,Date.now(),fork);return projectRow(own(id,user));}
- function save(id,body,user){const row=own(id,user);if(body.revision!==row.revision)throw fail(409,'A newer version was saved in another tab. Reopen the project before saving.');const p=validateProject(body);db.exec('BEGIN');try{db.prepare('INSERT INTO history VALUES(?,?,?,?)').run(randomUUID(),id,row.body,Date.now());db.prepare('UPDATE projects SET body=?,revision=revision+1,updated=? WHERE id=?').run(JSON.stringify(p),Date.now(),id);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return projectRow(own(id,user));}
+ function rejectDuplicate(project,user,exceptId){
+  if(!project.files.some(file=>!file.directory&&file.content.trim()))return;
+  const hash=digest(project);
+  const existing=db.prepare('SELECT id,body FROM projects WHERE owner=? AND fork IS NULL AND id<>?').all(user.id,exceptId||'');
+  const match=existing.find(row=>{const other=JSON.parse(row.body);return other.kind===project.kind&&digest(other)===hash;});
+  if(match)throw fail(409,`Duplicate ${project.kind}: the same code already exists as "${JSON.parse(match.body).name}".`);
+ }
+ function checkName(project,user,exceptId){
+  const match=db.prepare('SELECT body FROM projects WHERE owner=? AND id<>?').all(user.id,exceptId||'').find(row=>JSON.parse(row.body).name.trim().toLocaleLowerCase()===project.name.trim().toLocaleLowerCase());
+  if(match)throw fail(409,`A project named "${JSON.parse(match.body).name}" already exists. Choose a different name.`);
+ }
+ function create(body,user,fork=null){if(!String(body.name||'').trim()||!String(body.description||'').trim()||!String(body.category||'').trim())throw fail(400,'Enter a name, description, and category before creating the project.');const project=validateProject(body),id=randomUUID();checkName(project,user);if(!fork)rejectDuplicate(project,user);db.prepare('INSERT INTO projects VALUES(?,?,?,?,?,?)').run(id,user.id,JSON.stringify(project),1,Date.now(),fork);return projectRow(own(id,user));}
+ function save(id,body,user){const row=own(id,user);if(body.revision!==row.revision)throw fail(409,'A newer version was saved in another tab. Reopen the project before saving.');const p=validateProject(body);checkName(p,user,id);if(!row.fork&&!body.allowDuplicate)rejectDuplicate(p,user,id);db.exec('BEGIN');try{db.prepare('INSERT INTO history VALUES(?,?,?,?)').run(randomUUID(),id,row.body,Date.now());db.prepare('UPDATE projects SET body=?,revision=revision+1,updated=? WHERE id=?').run(JSON.stringify(p),Date.now(),id);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return projectRow(own(id,user));}
  const send=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
  async function body(req){let size=0,chunks=[];for await(const chunk of req){size+=chunk.length;if(size>70*1024*1024)throw fail(413,'Upload exceeds 70 MB.');chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString()||'{}')}catch{throw fail(400,'Invalid JSON request.');}}
  const server=http.createServer(async(req,res)=>{try{
@@ -49,6 +61,19 @@ export function startStudio({port=4317,dataDir=path.join(root,'.data'),hostRoot=
  const token=(req.headers.cookie||'').match(/(?:^|;\s*)studio_session=([a-f0-9]+)/)?.[1];const user=localUser||(token&&db.prepare('SELECT a.id,a.email,a.role FROM accounts a JOIN sessions s ON a.id=s.owner WHERE s.token=? AND s.expires>?').get(token,Date.now()));if(!user)throw fail(401,'Sign in to Code Studio.');
  if(route==='/api/me')return send(res,200,user);
  if(route==='/api/logout'){if(localAccess)return send(res,200,{ok:true});db.prepare('DELETE FROM sessions WHERE token=?').run(token);res.setHeader('Set-Cookie','studio_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});}
+ if(route==='/api/assets'&&method==='GET')return send(res,200,db.prepare('SELECT id,name,mime,created FROM assets WHERE owner=? ORDER BY created DESC').all(user.id).map(asset=>({...asset,url:`/api/assets/${asset.id}/file`})));
+ if(route==='/api/assets'&&method==='POST'){
+  const name=String(data.name||'').trim().slice(0,160),mime=String(data.mime||'');
+  if(!name||!['image/png','image/jpeg','image/webp','image/gif'].includes(mime)||typeof data.content!=='string'||data.content.length>14*1024*1024||!/^[A-Za-z0-9+/]+={0,2}$/.test(data.content))throw fail(400,'Choose a PNG, JPEG, WebP, or GIF image under 10 MB.');
+  const content=Buffer.from(data.content,'base64');if(!content.length||content.length>10*1024*1024)throw fail(413,'Image exceeds 10 MB.');
+  const valid=mime==='image/png'?content.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')):mime==='image/jpeg'?content.subarray(0,3).equals(Buffer.from('ffd8ff','hex')):mime==='image/gif'?content.toString('ascii',0,6).match(/^GIF8[79]a$/):content.toString('ascii',0,4)==='RIFF'&&content.toString('ascii',8,12)==='WEBP';
+  if(!valid)throw fail(400,'The selected file is not a valid image.');
+  const id=randomUUID(),created=Date.now();db.prepare('INSERT INTO assets VALUES(?,?,?,?,?,?)').run(id,user.id,name,mime,content,created);return send(res,201,{id,name,mime,created,url:`/api/assets/${id}/file`});
+ }
+ const assetFile=route.match(/^\/api\/assets\/([a-f0-9-]+)\/file$/);
+ if(assetFile&&method==='GET'){const asset=db.prepare('SELECT mime,content FROM assets WHERE id=? AND owner=?').get(assetFile[1],user.id);if(!asset)throw fail(404,'Image not found.');res.writeHead(200,{'Content-Type':asset.mime,'Cache-Control':'private, max-age=3600'});return res.end(asset.content);}
+ const assetRoute=route.match(/^\/api\/assets\/([a-f0-9-]+)$/);
+ if(assetRoute&&method==='DELETE'){const result=db.prepare('DELETE FROM assets WHERE id=? AND owner=?').run(assetRoute[1],user.id);if(!result.changes)throw fail(404,'Image not found.');return send(res,200,{ok:true});}
  if(route==='/api/projects'&&method==='GET')return send(res,200,db.prepare('SELECT * FROM projects WHERE owner=? ORDER BY updated DESC').all(user.id).map(projectRow));
  if(route==='/api/projects'&&method==='POST')return send(res,201,create(Array.isArray(data.files)?data:{name:data.name||'Untitled project',kind:data.kind||'component',description:data.description||'',category:data.category||'Auto',entry:'',files:[]},user));
  const match=route.match(/^\/api\/projects\/([\w-]+)(?:\/(\w+))?$/);
@@ -63,13 +88,36 @@ export function startStudio({port=4317,dataDir=path.join(root,'.data'),hostRoot=
  await compile(p,'validation');const hash=digest(p),previous=db.prepare('SELECT * FROM releases WHERE project=? ORDER BY version DESC LIMIT 1').get(id);
  const release={...validateProject(p),category:p.category==='Auto'?categoryFor(p.files):p.category};
  if(previous?.active&&previous.hash===hash&&previous.body===JSON.stringify(release))return send(res,200,{id:previous.id,version:previous.version,unchanged:true});
+ if(!data.allowDuplicate)rejectDuplicate(p,user,id);
  const releaseId=randomUUID(),version=(previous?.version||0)+1;
  db.prepare('INSERT INTO releases VALUES(?,?,?,?,?,?,?,?)').run(releaseId,id,user.id,version,JSON.stringify(release),hash,Date.now(),1);return send(res,201,{id:releaseId,version});}
  if(action==='terminal'&&method==='POST')return send(res,200,await runTerminal(p,data.command));
  }
  if(route==='/api/preview'&&method==='POST')return send(res,200,await compile(validateProject(data),String(data.token||'preview').slice(0,100)));
  if(route==='/api/inspect'&&method==='POST')return send(res,200,{files:inspectEdit(validateProject(data.project),data.node,data.changes)});
+ if(route==='/api/studio-library'&&method==='GET'){
+ const releases=db.prepare('SELECT r.* FROM releases r WHERE version=(SELECT MAX(version) FROM releases newer WHERE newer.project=r.project) AND (r.active=1 OR r.owner=?) ORDER BY created DESC').all(user.id).map(r=>({...JSON.parse(r.body),id:r.id,version:r.version,status:r.active?'published':'unpublished'}));
+ const drafts=db.prepare('SELECT p.* FROM projects p WHERE owner=? AND NOT EXISTS(SELECT 1 FROM releases r WHERE r.project=p.id) ORDER BY updated DESC').all(user.id).map(r=>({...projectRow(r),version:0,status:'draft'}));
+ return send(res,200,[...releases,...drafts]);
+ }
  if(route==='/api/library'&&method==='GET')return send(res,200,db.prepare('SELECT r.* FROM releases r WHERE active=1 AND version=(SELECT MAX(version) FROM releases newer WHERE newer.project=r.project AND active=1) ORDER BY created DESC').all().map(r=>({...JSON.parse(r.body),id:r.id,version:r.version,created:r.created})));
+ const manage=route.match(/^\/api\/library\/([\w-]+)\/(publish|delete|modify)$/);
+ if(manage&&method==='POST'){
+ const r=db.prepare('SELECT * FROM releases WHERE id=?').get(manage[1]);
+ if(!r)throw fail(404,'Item not found.');
+ if(user.role!=='admin'||r.owner!==user.id)throw fail(403,'Only the publishing admin can manage this item.');
+ if(manage[2]==='modify'){
+ const existing=db.prepare('SELECT * FROM projects WHERE id=? AND owner=?').get(r.project,user.id);
+ if(existing)return send(res,200,projectRow(existing));
+ const restored=create(JSON.parse(r.body),user);
+ db.prepare('UPDATE releases SET project=? WHERE project=? AND owner=?').run(restored.id,r.project,user.id);
+ return send(res,200,restored);
+ }
+ if(manage[2]==='publish'){await compile(validateProject(JSON.parse(r.body)),'validation');db.prepare('UPDATE releases SET active=0 WHERE project=?').run(r.project);db.prepare('UPDATE releases SET active=1 WHERE id=?').run(r.id);}
+ else if(data.deleteProject){db.exec('BEGIN');try{db.prepare('DELETE FROM history WHERE project=?').run(r.project);db.prepare('DELETE FROM releases WHERE project=? AND owner=?').run(r.project,user.id);db.prepare('DELETE FROM projects WHERE id=? AND owner=?').run(r.project,user.id);db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}}
+ else db.prepare('DELETE FROM releases WHERE project=? AND owner=?').run(r.project,user.id);
+ return send(res,200,{ok:true});
+ }
  const releaseMatch=route.match(/^\/api\/library\/([\w-]+)\/(fork|unpublish)$/);
  if(releaseMatch&&method==='POST'){const release=db.prepare('SELECT * FROM releases WHERE id=? AND active=1').get(releaseMatch[1]);if(!release)throw fail(404,'Published item not found.');if(releaseMatch[2]==='fork')return send(res,201,create({...JSON.parse(release.body),name:data.name||JSON.parse(release.body).name+' — my copy'},user,release.id));if(user.role!=='admin'||release.owner!==user.id)throw fail(403,'Only the publishing admin can unpublish.');db.prepare('UPDATE releases SET active=0 WHERE project=?').run(release.project);return send(res,200,{ok:true});}
  if(route==='/api/modifications'){if(user.role!=='admin')throw fail(403,'Admin access required.');return send(res,200,db.prepare('SELECT p.*,r.hash originalHash,a.email FROM projects p JOIN releases r ON r.id=p.fork JOIN accounts a ON a.id=p.owner WHERE r.owner=?').all(user.id).filter(p=>digest(JSON.parse(p.body))!==p.originalHash).map(p=>({...projectRow(p),user:p.email})));}

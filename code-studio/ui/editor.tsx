@@ -87,7 +87,7 @@ export default function Editor({
   problems.current = onProblems;
   useEffect(() => {
     const editor = monaco.editor.create(element.current!, {
-      theme: "vs-dark",
+      theme: document.documentElement.dataset.theme === "light" ? "vs" : "vs-dark",
       automaticLayout: true,
       fontSize: 13,
       fontFamily: "Consolas, monospace",
@@ -100,6 +100,8 @@ export default function Editor({
       model: null,
     });
     instance.current = editor;
+    const themeObserver = new MutationObserver(() => monaco.editor.setTheme(document.documentElement.dataset.theme === "light" ? "vs" : "vs-dark"));
+    themeObserver.observe(document.documentElement, {attributes:true,attributeFilter:['data-theme']});
     const sub = editor.onDidChangeModelContent(() => {
       const m = editor.getModel();
       if (m) change.current(m.uri.path.slice(1), m.getValue());
@@ -158,6 +160,7 @@ export default function Editor({
     return () => {
       sub.dispose();
       diagnostic.dispose();
+      themeObserver.disconnect();
       editor.dispose();
       models.current.forEach((m) => m.dispose());
       models.current.clear();

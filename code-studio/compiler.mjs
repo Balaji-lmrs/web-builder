@@ -47,12 +47,12 @@ export async function compile(project,token){
   }
   if(node.tagName==='script'&&(attr(node,'src')||attr(node,'type')==='module')){
    let p=local(entry,attr(node,'src')||'');if(!attr(node,'src')){p='__inline_'+nodes.indexOf(node)+'.js';files[p]={content:(node.childNodes||[]).map(x=>x.value||'').join('')};}
-   if(!files[p])throw new Error(`Script not found: ${p}`);const b=await bundle(files,p);set(node,'type','text/javascript');node.attrs=node.attrs.filter(a=>a.name!=='src');node.childNodes=[{...textNode(b.js.replace(/<\/script/gi,'<\\/script')),parentNode:node}];css+='\n'+b.css;warnings.push(...b.warnings);
+   if(!files[p]){warnings.push(`Script not found: ${p}; the page was rendered without that script.`);node.parentNode.childNodes=node.parentNode.childNodes.filter(n=>n!==node);continue;}const b=await bundle(files,p);set(node,'type','text/javascript');node.attrs=node.attrs.filter(a=>a.name!=='src');node.childNodes=[{...textNode(b.js.replace(/<\/script/gi,'<\\/script')),parentNode:node}];css+='\n'+b.css;warnings.push(...b.warnings);
   }
   for(const name of ['src','poster']){const value=attr(node,name);if(value&&!/^(data:|https?:|blob:)/.test(value)){const f=files[local(entry,value)];if(f)set(node,name,`data:${f.mime||'image/svg+xml'};base64,${f.binary?f.content:Buffer.from(f.content).toString('base64')}`);}}
  }
  css=css.replace(/url\(["']?([^)'"\s]+)["']?\)/g,(match,url)=>{if(/^(data:|https?:|#)/.test(url))return match;const f=files[local(entry,url)]||files[url];return f?`url("data:${f.mime||'application/octet-stream'};base64,${f.binary?f.content:Buffer.from(f.content).toString('base64')}")`:match;});
- let html=serialize(doc);const security=`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob: https:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">`;
+ let html=serialize(doc);const security=`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob: https: http://localhost:* http://127.0.0.1:*; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">`;
  html=html.replace('<head>',`<head>${security}<script>${bridge(token)}</script><style>${css.replace(/<\/style/gi,'<\\/style')}</style>`);
  if(js)html=html.replace('</body>',`<script>${js.replace(/<\/script/gi,'<\\/script')}</script></body>`);
  return {html,warnings};

@@ -1,1 +1,0 @@
-const fs=require('fs');const p='src/app/App.tsx';let s=fs.readFileSync(p,'utf8');const a=s.indexOf('function CodeEditor()'),b=s.indexOf('const demoProducts=',a);const n=fs.readFileSync('remove-fn.txt','utf8');fs.writeFileSync(p,s.slice(0,a)+n+'\n'+s.slice(b));

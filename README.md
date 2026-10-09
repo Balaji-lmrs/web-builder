@@ -1,20 +1,15 @@
 # Website Builder
 
-This is a production-oriented website-builder frontend starter. It implements the principal creation flow with local browser persistence: authentication screens, dashboard, templates, project creation, visual editing, section reordering, property updates, responsive canvas modes, a secure iframe preview for custom HTML, and a publish-ready preview route.
+The main website is a React/Vite frontend in `src/`. The integrated Code Studio editor and local API live in `code-studio/`. These are connected parts of one application, not duplicate implementations.
 
-## Run
+For the active folder map, see [src/ARCHITECTURE.md](src/ARCHITECTURE.md). For Code Studio setup, see [code-studio/README.md](code-studio/README.md).
 
-```powershell
-npm install
-npm run dev
-```
+## Run the full local project
 
-## Persistence and services
+From `code-studio/`, run `./start.ps1` in PowerShell. The script prints the local URL; use that URL rather than assuming a fixed port. Keep that terminal running while using the site. The local server serves the built frontend and provides the Code Studio API.
 
-Project state is stored in `localStorage` to make the demo self-contained. Replace `src/store.ts` with REST client calls when wiring the service layer. The UI deliberately reports publishing as unconfigured rather than claiming a deployment occurred. The code preview runs in a sandboxed iframe and blocks scripts; use a server-side transform/sandbox worker before enabling JSX or JavaScript execution.
+The main frontend can also be built from the repository root with `npm run build`. Code Studio has separate dependencies and tests: run `npm test` inside `code-studio/`.
 
-## Recommended production service boundary
+## Data and generated output
 
-`React client → Express API → service → repository → PostgreSQL/MongoDB`
-
-Authentication, media upload, real deployment, analytics, and database status screens require configured backend credentials and are intentionally integration points rather than faked connections. Payment processing is outside this project's scope.
+Browser projects use local browser storage. Code Studio saves work in `code-studio/.data/`. Build output (`dist/` and `code-studio/host-dist/`) and dependencies are generated and ignored by Git. Do not delete storage when cleaning source files.

@@ -1,1 +1,0 @@
-export function relativeTime(timestamp:number){const minutes=Math.floor(Math.max(0,Date.now()-timestamp)/60000);if(minutes<1)return "Just now";if(minutes<60)return `${minutes} minute${minutes===1?"":"s"} ago`;const hours=Math.floor(minutes/60);return `${hours} hour${hours===1?"":"s"} ago`}
